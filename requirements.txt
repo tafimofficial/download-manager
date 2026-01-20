@@ -1,0 +1,9 @@
+customtkinter
+requests
+flask
+flask_cors
+plyer
+pystray
+Pillow
+pyinstaller
+cx_Freeze

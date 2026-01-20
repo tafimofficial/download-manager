@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual Environment
+.venv/
+venv/
+env/
+
+# Distribution / Build
+build/
+dist/
+*.spec
+
+# PyInstaller
+*.manifest
+
+# IDEs
+.idea/
+.vscode/
+
+# Project Specific
+.tafim_tmp/
+app.log
