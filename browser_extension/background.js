@@ -37,21 +37,41 @@ function isAllowed(url) {
 }
 
 chrome.downloads.onCreated.addListener((downloadItem) => {
-    if (downloadItem.url.startsWith('http') && isAllowed(downloadItem.url)) {
-        // Automatically notify the app to catch the download
-        sendToTurbo(downloadItem.url);
+    // MV3 Service Worker wake-up check
+    chrome.storage.session.get(["sessionStart"], (result) => {
+        let start = result.sessionStart;
+        if (!start) {
+            start = Date.now();
+            chrome.storage.session.set({ sessionStart: start });
+        }
 
-        // Cancel the browser download to avoid duplicates
-        chrome.downloads.cancel(downloadItem.id);
-    }
+        // 2-second grace period for Browser Session Restore
+        if (Date.now() - start < 2000) {
+            return;
+        }
+
+        if (downloadItem.url.startsWith('http') && isAllowed(downloadItem.url)) {
+            // 1. Pause immediately so it doesn't make progress in the browser
+            chrome.downloads.pause(downloadItem.id, () => {
+                // 2. Try to send to Turbo App
+                sendToTurbo(downloadItem.url)
+                    .then(() => {
+                        // Success: App took it. Cancel and Erase from browser history/shelf.
+                        chrome.downloads.cancel(downloadItem.id, () => {
+                            chrome.downloads.erase({ id: downloadItem.id });
+                        });
+                        console.log("Handed off to Turbo Downloader");
+                    })
+                    .catch((err) => {
+                        // Fail: App not running. Resume in browser.
+                        console.log("App not reachable, resuming in browser.", err);
+                        chrome.downloads.resume(downloadItem.id);
+                    });
+            });
+        }
+    }); // End storage.get
 });
 
 function sendToTurbo(url) {
-    fetch(`http://localhost:5555/add?url=${encodeURIComponent(url)}`)
-        .then(response => {
-            console.log("Sent to Turbo Downloader!");
-        })
-        .catch(error => {
-            console.error("Error sending to Turbo. Is the app running?", error);
-        });
+    return fetch(`http://localhost:5555/add?url=${encodeURIComponent(url)}`);
 }

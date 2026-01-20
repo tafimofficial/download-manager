@@ -228,7 +228,10 @@ class TafimApp(ctk.CTk):
         self.notify_on_complete = ctk.BooleanVar(value=True)
         self.current_filter = "All"
         self.nav_btns = {}
-        self.last_clip = ""
+        try:
+            self.last_clip = self.clipboard_get().strip()
+        except:
+            self.last_clip = ""
         self.thread_count = ctk.IntVar(value=32)
 
         self.create_sidebar()
