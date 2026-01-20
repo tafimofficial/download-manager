@@ -158,7 +158,7 @@ class DownloadRow(ctk.CTkFrame):
 
     def set_completed_ui(self):
         # Change Pause to Open Folder
-        self.p_btn.configure(text="📁", command=lambda: os.startfile(os.path.dirname(self.save_path)))
+        self.p_btn.configure(text="📁", command=lambda: os.startfile(os.path.dirname(self.downloader.save_path)))
         # Change Cancel to Remove
         self.c_btn.configure(text="🗑", fg_color="#2C2C2E", text_color=COLOR_TEXT_MUTE, hover_color="#3A3A3C", command=self.remove_from_list)
         # Update speed to show file size
@@ -200,7 +200,7 @@ class DownloadRow(ctk.CTkFrame):
             self.monitoring = False
             self.p_bar.configure(progress_color=COLOR_SUCCESS)
             self.set_completed_ui()
-            self.app.on_download_complete(self.downloader.filename, self.save_path)
+            self.app.on_download_complete(self.downloader.filename, self.downloader.save_path)
             self.app.refresh_list()
         elif status == "error":
             self.monitoring = False
