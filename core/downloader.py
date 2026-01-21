@@ -67,29 +67,42 @@ class Downloader:
             except: pass
 
     def get_file_info(self):
-        try:
-            # High-speed optimized headers
-            headers = {
-                'Accept-Encoding': 'identity',
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-            }
-            response = self.session.head(self.url, allow_redirects=True, headers=headers, timeout=10)
-            
+        def _parse_headers(resp):
             # Try to get filename from Content-Disposition
-            cd = response.headers.get('content-disposition')
+            cd = resp.headers.get('content-disposition')
             if cd and 'filename=' in cd:
                 fname = cd.split('filename=')[-1].strip(' "')
                 if fname:
                     self.filename = fname
-                    # Re-evaluate save path if filename changed
                     self.save_path = os.path.join(os.path.dirname(self.save_path), self.filename)
                     self._update_temp_paths()
-                    # If we already had state, we might need to move it? 
-                    # For now assume new download or we find it in new path.
 
-            self.file_size = int(response.headers.get('content-length', 0))
-            accept_ranges = response.headers.get('accept-ranges', 'none')
-            return self.file_size, accept_ranges == 'bytes'
+            size = int(resp.headers.get('content-length', 0))
+            accept_ranges = resp.headers.get('accept-ranges', 'none')
+            return size, accept_ranges == 'bytes'
+
+        try:
+            # 1. Try HEAD first (fast)
+            headers = {
+                'Accept-Encoding': 'identity',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            }
+            try:
+                response = self.session.head(self.url, allow_redirects=True, headers=headers, timeout=5)
+                if response.status_code >= 400: raise Exception(f"Status {response.status_code}")
+                return _parse_headers(response)
+            except Exception as e:
+                print(f"HEAD request failed ({e}), trying GET stream...")
+            
+            # 2. Fallback to GET stream (reliable but starts download)
+            # stream=True ensures we don't download body yet
+            with self.session.get(self.url, allow_redirects=True, headers=headers, stream=True, timeout=10) as r:
+                if r.status_code >= 400: 
+                    # If even GET fails, we really can't download
+                    print(f"GET failed: {r.status_code}")
+                    return 0, False
+                return _parse_headers(r)
+                
         except Exception as e:
             print(f"Error getting file info: {e}")
             return 0, False
@@ -127,12 +140,16 @@ class Downloader:
     def download_chunk(self, chunk_index, start, end):
         current_offset = self.chunk_info[chunk_index]['current']
         # If already done
-        if current_offset >= (end - start + 1):
+        if end != -1 and current_offset >= (end - start + 1):
              self.chunk_info[chunk_index]['status'] = 'completed'
              return
 
+        range_header = f'bytes={start + current_offset}-'
+        if end != -1:
+            range_header += str(end)
+            
         headers = {
-            'Range': f'bytes={start + current_offset}-{end}',
+            'Range': range_header,
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
         }
         try:
@@ -167,20 +184,24 @@ class Downloader:
         if not self.load_state():
             size, resumable = self.get_file_info()
             if size == 0:
-                self.status = "error"
-                print("Could not get file size.")
-                return
+                # Unknown size or fallback
+                print("Size unknown or 0, falling back to single thread stream.")
+                self.file_size = 0
+                self.threads = 1
+                # end=-1 indicates open-ended
+                self.chunk_info = [{'start': 0, 'end': -1, 'current': 0, 'status': 'pending'}]
             
-            self.file_size = size
-            if resumable and self.threads > 1:
-                chunk_size = size // self.threads
-                self.chunk_info = []
-                for i in range(self.threads):
-                    start = i * chunk_size
-                    end = (i + 1) * chunk_size - 1 if i < self.threads - 1 else size - 1
-                    self.chunk_info.append({'start': start, 'end': end, 'current': 0, 'status': 'pending'})
             else:
-                 self.chunk_info = [{'start': 0, 'end': size - 1, 'current': 0, 'status': 'pending'}]
+                self.file_size = size
+                if resumable and self.threads > 1:
+                    chunk_size = size // self.threads
+                    self.chunk_info = []
+                    for i in range(self.threads):
+                        start = i * chunk_size
+                        end = (i + 1) * chunk_size - 1 if i < self.threads - 1 else size - 1
+                        self.chunk_info.append({'start': start, 'end': end, 'current': 0, 'status': 'pending'})
+                else:
+                     self.chunk_info = [{'start': 0, 'end': size - 1, 'current': 0, 'status': 'pending'}]
         
         self.save_state()
         

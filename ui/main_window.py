@@ -187,11 +187,24 @@ class DownloadRow(ctk.CTkFrame):
     def update(self):
         if not self.monitoring: return
         status = self.downloader.status
-        self.p_bar.set(self.downloader.get_progress())
         
-        cur = self.app.fmt_size(self.downloader.downloaded_size)
-        tot = self.app.fmt_size(self.downloader.file_size)
-        self.stats_lbl.configure(text=f"{cur} / {tot}")
+        # Handle unknown size
+        if self.downloader.file_size == 0:
+            if self.p_bar.cget("mode") != "indeterminate":
+                self.p_bar.configure(mode="indeterminate")
+                self.p_bar.start()
+            
+            cur = self.app.fmt_size(self.downloader.downloaded_size)
+            self.stats_lbl.configure(text=f"{cur} / ??")
+        else:
+            if self.p_bar.cget("mode") != "determinate":
+                self.p_bar.stop()
+                self.p_bar.configure(mode="determinate")
+                
+            self.p_bar.set(self.downloader.get_progress())
+            cur = self.app.fmt_size(self.downloader.downloaded_size)
+            tot = self.app.fmt_size(self.downloader.file_size)
+            self.stats_lbl.configure(text=f"{cur} / {tot}")
         
         speed = self.app.fmt_speed(self.downloader.speed)
         self.speed_lbl.configure(text=speed)
@@ -379,7 +392,10 @@ class TafimApp(ctk.CTk):
                 # Check extension
                 try:
                     from urllib.parse import urlparse
-                    parsed_path = urlparse(c).path
+                    parsed = urlparse(c)
+                    if parsed.netloc == 'movie094.movielinkbd.li': return
+                    
+                    parsed_path = parsed.path
                     base, ext_w_dot = os.path.splitext(parsed_path)
                     if ext_w_dot:
                         ext = ext_w_dot.lstrip('.').upper()

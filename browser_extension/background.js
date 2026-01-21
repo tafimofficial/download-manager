@@ -20,9 +20,16 @@ const ALLOWED_EXTS = new Set([
     'PPS', 'PPT', 'QT', 'RA', 'RAR', 'RM', 'RMVB', 'SEA', 'SIT', 'SITX', 'TAR', 'TIF', 'TIFF', 'WAV', 'WMA', 'WMV', 'Z', 'ZIP'
 ]);
 
+const BLOCKED_DOMAINS = new Set([
+    'movie094.movielinkbd.li'
+]);
+
 function isAllowed(url) {
     try {
-        const path = new URL(url).pathname.toLowerCase();
+        const u = new URL(url);
+        if (BLOCKED_DOMAINS.has(u.hostname)) return false;
+
+        const path = u.pathname.toLowerCase();
         const ext = path.split('.').pop().toUpperCase();
 
         if (ALLOWED_EXTS.has(ext)) return true;
